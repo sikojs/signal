@@ -120,8 +120,14 @@ This fixes JSX/TSX instrumentation issues in React projects.
 
 #### Known Limitations
 
-**JSX/TSX Support (v0.4.x)**
-- Limited JSX/TSX support due to Babel transformation issues
+**ES Modules Support**
+- siko currently only supports CommonJS projects
+- Projects with `"type": "module"` are not yet supported
+- Target: ES module support in v0.5.0
+
+**JSX/TSX Support**  
+- Limited support, requires exclusion workaround
+- Target: Full React/JSX support in v0.5.0
 - **Workaround**: Exclude .tsx/.jsx files in config:
 ```json
   {
@@ -129,4 +135,12 @@ This fixes JSX/TSX instrumentation issues in React projects.
     "exclude": ["**/*.tsx", "**/*.jsx", "src/components/**"]
   }
 ```
+
+**Current Best Use Cases:**
+- ✅ Node.js CommonJS backends
+- ✅ TypeScript libraries (CommonJS)
+- ✅ Traditional npm packages
+- ❌ ES module projects (Hono, modern Vite apps)
+- ❌ React/JSX projects (workaround available)
+
 - **Target**: Full React/JSX support in v0.5.0
