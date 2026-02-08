@@ -1,3 +1,23 @@
+## [0.4.0] - 2026-02-08
+
+### Added
+- **Source map support** - Reports now show original TypeScript line numbers
+- **Glob pattern exclusions** - Use `**/*.test.ts`, `*.tsx`, `src/jsx/**` patterns
+- Prettier code formatting with CI enforcement
+- `--no-source-maps` flag to disable source map resolution
+
+### Fixed
+- JSX/TSX file exclusion now works correctly with glob patterns
+- Line number accuracy in TypeScript projects
+- Exclude patterns like `*.test.js` now properly recognized
+
+### Improved
+- CI optimized - runs only on PRs, 2x faster
+- File discovery with robust glob pattern matching
+- Developer experience for TypeScript users
+
+---
+
 ## [0.3.1] - 2026-02-07
 
 ### Fixed
@@ -73,7 +93,6 @@
 
 ### Planned
 
-- Source map support for TypeScript
 - HTML report generation
 - Watch mode
 - Historical trend analysis
