@@ -1,3 +1,15 @@
+## [0.4.1] - 2026-02-08
+
+### Fixed
+- **Critical**: Configuration options now properly applied to file discovery
+- Extensions filter now correctly excludes .tsx/.jsx files
+- Exclude patterns now properly respected during instrumentation
+- Config settings were being ignored in v0.4.0
+
+This fixes JSX/TSX instrumentation issues in React projects.
+
+---
+
 ## [0.4.0] - 2026-02-08
 
 ### Added
