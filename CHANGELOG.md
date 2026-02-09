@@ -1,3 +1,10 @@
+## [0.4.4] - 2026-02-08
+
+### Changed
+- Updated README with repository rename and improved documentation
+
+---
+
 ## [0.4.3] - 2026-02-08
 
 ### Changed
