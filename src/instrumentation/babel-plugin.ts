@@ -315,50 +315,50 @@ function injectTrackingImport(path: NodePath<t.Program>, moduleType: ModuleType)
 }
 
 /**
- * Decide if a file should be skipped for injection.
- * We skip files that reference runtime globals (Deno, Bun, globalThis),
- * contain a TS `declare global` module, or include triple-slash reference
- * comments. These files typically rely on top-level script behavior and
- * adding imports can change how TypeScript treats them.
+ * Check if file should skip instrumentation based on generic TypeScript patterns.
+ * This is resilient across all runtimes by detecting TypeScript language features,
+ * not runtime-specific globals.
+ *
+ * Returns true for:
+ * 1. .d.ts files (pure type declarations)
+ * 2. Files with ambient declarations that need script context (no imports)
  */
-function shouldSkipFileForInjection(path: NodePath<t.Program>): boolean {
-  // 1) Check for obvious AST nodes: identifiers named Deno or Bun,
-  //    member expressions with globalThis, or TS module declaration 'global'.
-  let skip = false;
+function shouldSkipInstrumentation(path: NodePath<t.Program>, state: PluginState): boolean {
+  // 1. Skip .d.ts files entirely - they're pure type declarations
+  const filename = state.filename || '';
+  if (filename.endsWith('.d.ts')) {
+    return true;
+  }
 
-  path.traverse({
-    Identifier(p) {
-      if (p.node.name === 'Deno' || p.node.name === 'Bun') {
-        skip = true;
-        p.stop();
-      }
-    },
-    MemberExpression(p) {
-      if (t.isIdentifier(p.node.object) && p.node.object.name === 'globalThis') {
-        skip = true;
-        p.stop();
-      }
-    },
-    TSModuleDeclaration(p) {
-      // e.g. "declare global { ... }"
-      if (t.isIdentifier(p.node.id) && p.node.id.name === 'global') {
-        skip = true;
-        p.stop();
-      }
-    },
-  });
+  // 2. Check if file already has imports/requires - if yes, it's a module, safe to instrument
+  const hasImports = path.node.body.some(
+    (node) => t.isImportDeclaration(node) ||
+    (t.isVariableDeclaration(node) &&
+     node.declarations.some(d =>
+       t.isCallExpression(d.init) &&
+       t.isIdentifier(d.init.callee) &&
+       d.init.callee.name === 'require'
+     ))
+  );
 
-  if (skip) return true;
+  if (hasImports) {
+    return false; // Already a module, safe to add our import
+  }
 
-  // 2) Check top-level comments for triple-slash references
-  const comments = (((path as any).hub && (path as any).hub.file && ((path as any).hub.file.ast as any)?.comments) as any[]) || [];
-  for (const c of comments) {
-    if (c.value && c.value.includes('<reference')) {
-      return true;
+  // 3. Check for ambient declarations that require script context
+  // Pattern: top-level `declare namespace Foo` or `declare global` without existing imports
+  // Adding imports to these files converts them from script to module, breaking ambient declarations
+  let hasAmbientDeclaration = false;
+
+  for (const node of path.node.body) {
+    // Check for: declare namespace Foo { ... } or declare global { ... }
+    if (t.isTSModuleDeclaration(node) && node.declare) {
+      hasAmbientDeclaration = true;
+      break;
     }
   }
 
-  return false;
+  return hasAmbientDeclaration;
 }
 
 /**
@@ -381,19 +381,10 @@ export default function sikoInstrumentationPlugin(
     visitor: {
       // Inject tracking import at the top of the file
       Program: {
-        enter(path) {
-          // Surgical skip: some files (adapter/runtime-tests) rely on
-          // top-level script behavior, ambient declarations (Deno/Bun),
-          // or triple-slash references. Injecting imports into those
-          // files can change how TypeScript interprets them and break
-          // compilation. Detect and mark such files so we skip
-          // instrumentation entirely for them.
-          if (shouldSkipFileForInjection(path)) {
-            // mark plugin state to skip instrumenting functions in this file
-            // `this` is the plugin state for the current file
-            // use a non-standard property to avoid TypeScript complaints
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (this as any)._siko_skipInstrumentation = true;
+        enter(path, state) {
+          // Skip files with ambient declarations that would break if we add imports
+          if (shouldSkipInstrumentation(path, state)) {
+            (this as any)._skipFile = true;
             return;
           }
 
@@ -406,9 +397,7 @@ export default function sikoInstrumentationPlugin(
 
       // Instrument function declarations: function foo() {}
       FunctionDeclaration(path, state) {
-        // respect file-level skip flag
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((this as any)._siko_skipInstrumentation) return;
+        if ((this as any)._skipFile) return;
         if (shouldSkipFunction(path)) return;
 
         const node = path.node;
@@ -441,7 +430,7 @@ export default function sikoInstrumentationPlugin(
 
       // Instrument function expressions: const foo = function() {}
       FunctionExpression(path, state) {
-        if ((this as any)._siko_skipInstrumentation) return;
+        if ((this as any)._skipFile) return;
         if (shouldSkipFunction(path)) return;
 
         const node = path.node;
@@ -471,7 +460,7 @@ export default function sikoInstrumentationPlugin(
 
       // Instrument arrow functions: const foo = () => {}
       ArrowFunctionExpression(path, state) {
-        if ((this as any)._siko_skipInstrumentation) return;
+        if ((this as any)._skipFile) return;
         if (shouldSkipFunction(path)) return;
 
         const node = path.node;
@@ -507,7 +496,7 @@ export default function sikoInstrumentationPlugin(
 
       // Instrument class methods: class Foo { bar() {} }
       ClassMethod(path, state) {
-        if ((this as any)._siko_skipInstrumentation) return;
+        if ((this as any)._skipFile) return;
         if (shouldSkipFunction(path)) return;
 
         const node = path.node;
@@ -537,7 +526,6 @@ export default function sikoInstrumentationPlugin(
 
       // Instrument object methods: { foo() {} }
       ObjectMethod(path, state) {
-        if ((this as any)._siko_skipInstrumentation) return;
         if (shouldSkipFunction(path)) return;
 
         const node = path.node;
